@@ -258,18 +258,12 @@
     <script>
         // Ensure the DOM is fully loaded before running scripts
         document.addEventListener('DOMContentLoaded', function () {
-            // At startup, clear any existing log or exercise data so that
-            // you can begin from a clean slate.  This removes the
-            // persistent logs and exercises from localStorage if they
-            // exist.  On some browsers (e.g., Safari on iOS) localStorage
-            // may be disabled when viewing a local file, so wrap in
-            // try/catch to avoid runtime errors that would otherwise
-            // prevent the rest of the script from executing.
-            try {
-                localStorage.removeItem('logs');
-                localStorage.removeItem('exercises');
-            } catch (e) {
-                // If localStorage is unavailable, ignore the error.
+            // We previously cleared local data on startup, but that prevented
+            // your workout history from persisting.  The clear-on-startup
+            // behaviour has been removed.  Instead, request persistent
+            // storage to improve data retention, especially on mobile devices.
+            if (navigator.storage && navigator.storage.persist) {
+                navigator.storage.persist().catch(function () {});
             }
 
             // Retrieve stored data or initialize empty arrays
@@ -1076,6 +1070,118 @@
             updateChart();
             // Update built-in workout dropdown with days since last performed
             updateWorkoutOptionDays();
+
+            // --- Auto-save form state so you don't lose progress across sessions ---
+            // This feature records the current form (selected workout, date, custom rows,
+            // and matrix entries) whenever the user types.  On page load it restores
+            // any saved draft, and after a successful save it clears the draft.
+            const autosaveKey = 'workout_autosave_v1';
+            function snapshotFormState() {
+                const state = { currentWorkout: currentWorkout, date: document.getElementById('log-date').value };
+                // Capture custom rows
+                state.custom = Array.from(document.querySelectorAll('.exercise-row')).map(function (r) {
+                    return {
+                        name: (r.querySelector('.exercise-name') || {}).value || '',
+                        weight: (function () {
+                            const v = (r.querySelector('.exercise-weight') || {}).value;
+                            return v === '' || v == null ? null : Number(v);
+                        })(),
+                        reps: (function () {
+                            const v = (r.querySelector('.exercise-reps') || {}).value;
+                            return v === '' || v == null ? null : Number(v);
+                        })()
+                    };
+                });
+                // Capture matrix rows (built-in workouts)
+                state.matrix = [];
+                document.querySelectorAll('#matrix-container tbody tr').forEach(function (tr) {
+                    const first = tr.querySelector('td');
+                    if (!first) return;
+                    const name = first.textContent || '';
+                    const inputs = tr.querySelectorAll('input');
+                    if (inputs.length >= 6) {
+                        state.matrix.push({
+                            name: name,
+                            sets: [
+                                {
+                                    reps: inputs[0].value === '' ? null : Number(inputs[0].value),
+                                    weight: inputs[1].value === '' ? null : Number(inputs[1].value)
+                                },
+                                {
+                                    reps: inputs[2].value === '' ? null : Number(inputs[2].value),
+                                    weight: inputs[3].value === '' ? null : Number(inputs[3].value)
+                                },
+                                {
+                                    reps: inputs[4].value === '' ? null : Number(inputs[4].value),
+                                    weight: inputs[5].value === '' ? null : Number(inputs[5].value)
+                                }
+                            ]
+                        });
+                    }
+                });
+                try {
+                    localStorage.setItem(autosaveKey, JSON.stringify(state));
+                } catch (e) {
+                    // ignore if localStorage unavailable
+                }
+            }
+            document.getElementById('log-form').addEventListener('input', snapshotFormState);
+            // Restore autosaved state on load
+            try {
+                const draft = JSON.parse(localStorage.getItem(autosaveKey) || 'null');
+                if (draft) {
+                    // restore date
+                    if (draft.date) {
+                        document.getElementById('log-date').value = draft.date;
+                    }
+                    // restore workout selection and fields
+                    if (draft.currentWorkout && builtInWorkouts[draft.currentWorkout]) {
+                        workoutSelect.value = draft.currentWorkout;
+                        workoutSelect.dispatchEvent(new Event('change'));
+                        if (Array.isArray(draft.matrix)) {
+                            draft.matrix.forEach(function (m) {
+                                const row = Array.from(document.querySelectorAll('#matrix-container tbody tr')).find(function (tr) {
+                                    return tr.firstChild && tr.firstChild.textContent === m.name;
+                                });
+                                if (!row) return;
+                                const inputs = row.querySelectorAll('input');
+                                if (inputs.length >= 6 && Array.isArray(m.sets) && m.sets.length === 3) {
+                                    inputs[0].value = m.sets[0].reps != null ? m.sets[0].reps : '';
+                                    inputs[1].value = m.sets[0].weight != null ? m.sets[0].weight : '';
+                                    inputs[2].value = m.sets[1].reps != null ? m.sets[1].reps : '';
+                                    inputs[3].value = m.sets[1].weight != null ? m.sets[1].weight : '';
+                                    inputs[4].value = m.sets[2].reps != null ? m.sets[2].reps : '';
+                                    inputs[5].value = m.sets[2].weight != null ? m.sets[2].weight : '';
+                                }
+                            });
+                        }
+                    } else if (Array.isArray(draft.custom) && draft.custom.length) {
+                        workoutSelect.value = 'custom';
+                        workoutSelect.dispatchEvent(new Event('change'));
+                        draft.custom.forEach(function (c, idx) {
+                            if (idx > 0) {
+                                document.getElementById('add-exercise').click();
+                            }
+                            const rows = document.querySelectorAll('.exercise-row');
+                            const r = rows[rows.length - 1];
+                            if (!r) return;
+                            r.querySelector('.exercise-name').value = c.name || '';
+                            r.querySelector('.exercise-weight').value = c.weight != null ? c.weight : '';
+                            r.querySelector('.exercise-reps').value = c.reps != null ? c.reps : '';
+                        });
+                    }
+                }
+            } catch (e) {
+                // ignore restore errors
+            }
+            // Clear autosave after successful submit
+            document.getElementById('log-form').addEventListener('submit', function () {
+                try {
+                    localStorage.removeItem(autosaveKey);
+                } catch (e) {
+                    // ignore
+                }
+            });
 
             // Toggle display of logs and chart sections when buttons are clicked.  The
             // sections are hidden by default to simplify the page.  When
