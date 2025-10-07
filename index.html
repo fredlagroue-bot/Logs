@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Workout Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Chart.js library from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Basic styling for a clean, mobile‑friendly interface */
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f7f7f7;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-top: 0;
+        }
+        h2 {
+            margin-top: 40px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #log-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        #log-table th,
+        #log-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        #log-table th {
+            background-color: #f2f2f2;
+        }
+        .exercise-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .exercise-row input[type="text"],
+        .exercise-row input[type="number"] {
+            flex: 1;
+        }
+        .exercise-row button.remove-row {
+            background-color: #e74c3c;
+            padding: 0 10px;
+            line-height: 30px;
+        }
+        .chart-container {
+            margin-top: 20px;
+        }
+
+        /* Styling for the workout matrix table (built-in workouts). */
+        .matrix-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: center;
+        }
+        .matrix-table th {
+            background-color: #f2f2f2;
+        }
+
+        /* Style for displaying previous reps/weight values underneath inputs */
+        .prev-value {
+            font-size: 0.75em;
+            color: #777;
+            margin-top: 2px;
+        }
+
+        /* Styling for days-since cells beneath the set inputs */
+        .days-since {
+            font-size: 0.75em;
+            color: #555;
+            text-align: center;
+            padding-top: 4px;
+        }
+
+        /* Finisher modal overlay */
+        #finisher-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #finisher-content {
+            background: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 90%;
+        }
+        #finisher-timer {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Workout Tracker</h1>
+
+        <!--
+            Built‑in workout selection and logging
+
+            The three workouts provided in the attached image (Workout A, B and C) are
+            baked into the application. A dropdown allows you to choose one of these
+            programmes and automatically loads its exercises along with a short
+            description. Selecting "Custom Workout" leaves the exercise list blank so
+            you can manually enter any movements you like.  When logging one of the
+            built‑in workouts the "Save and Start Finisher!" button will both save
+            your entries and reveal a list of finishing exercises to complete.
+        -->
+
+        <!-- Workout logging section -->
+        <h2>Log Workout</h2>
+        <form id="log-form">
+            <div class="form-group">
+                <label for="log-date">Date</label>
+                <input type="date" id="log-date" required>
+            </div>
+            <div class="form-group">
+                <label for="workout-select">Select Workout</label>
+                <select id="workout-select">
+                    <!-- Built‑in options are hard‑coded here as a fallback so
+                         that the dropdown remains usable even if the
+                         JavaScript fails to execute (for example, when
+                         viewed as a local file in mobile Safari).  These
+                         options are duplicated programmatically when the
+                         script runs, but having them here ensures the
+                         dropdown is never empty. -->
+                    <option value="custom">Custom Workout</option>
+                    <option value="Workout A">Workout A - Back, Biceps, & Hamstring</option>
+                    <option value="Workout B">Workout B - Chest & Tricep</option>
+                    <option value="Workout C">Workout C - Shoulders & Arms</option>
+                </select>
+            </div>
+            <div id="workout-desc" class="form-group" style="font-style: italic; color: #555;"></div>
+        <!--
+            exercise-container is used for the custom workout interface where
+            each exercise entry comprises a name, weight and reps.  When a
+            built‑in workout is selected, we hide this section and instead
+            render a matrix in matrix-container below.
+        -->
+        <div id="exercise-container">
+            <!-- Dynamic exercise rows will be inserted here -->
+        </div>
+        <!-- Matrix container for built‑in workouts.  Hidden for custom. -->
+        <div id="matrix-container" style="display:none;"></div>
+        <button type="button" id="add-exercise">Add Exercise</button>
+        <button type="submit" id="save-workout">Save and Start Finisher!</button>
+        </form>
+
+        <!-- Logs and chart sections are initially hidden and toggled via buttons -->
+        <button type="button" id="view-logs-btn" style="margin-top: 20px;">View Workout Logs</button>
+        <button type="button" id="view-chart-btn" style="margin-left: 10px;">View Progress Chart</button>
+        <!-- Logs display -->
+        <div id="logs-section" style="display: none; margin-top: 20px;">
+            <h2>Workout Logs</h2>
+            <table id="log-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Exercise</th>
+                        <th>Weight</th>
+                        <th>Reps</th>
+                        <th>Total Power</th>
+                    </tr>
+                </thead>
+                <tbody id="log-body">
+                    <!-- Data rows are inserted dynamically -->
+                </tbody>
+            </table>
+        </div>
+        <!-- Chart controls and canvas -->
+        <div id="chart-section" style="display: none; margin-top: 20px;">
+            <h2>Progress Chart</h2>
+            <div class="form-group">
+                <label for="exercise-chart-select">Select Exercise to View</label>
+                <select id="exercise-chart-select"></select>
+            </div>
+            <div class="chart-container">
+                <canvas id="progressChart" height="300"></canvas>
+            </div>
+        </div>
+
+        <!-- Finisher section (initially hidden) -->
+        <div id="finisher-section" style="display:none; margin-top: 40px;">
+            <h2>Finisher Exercises</h2>
+            <ul id="finisher-list" style="list-style-type: disc; padding-left: 20px;"></ul>
+        </div>
+
+        <!-- Modal overlay for the finisher with countdown timer -->
+        <div id="finisher-overlay">
+            <div id="finisher-content">
+                <div id="finisher-timer">01:00</div>
+                <ul id="finisher-overlay-list" style="list-style-type: disc; text-align: left; padding-left: 20px;"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Ensure the DOM is fully loaded before running scripts
+        document.addEventListener('DOMContentLoaded', function () {
+            // At startup, clear any existing log or exercise data so that
+            // you can begin from a clean slate.  This removes the
+            // persistent logs and exercises from localStorage if they
+            // exist.  On some browsers (e.g., Safari on iOS) localStorage
+            // may be disabled when viewing a local file, so wrap in
+            // try/catch to avoid runtime errors that would otherwise
+            // prevent the rest of the script from executing.
+            try {
+                localStorage.removeItem('logs');
+                localStorage.removeItem('exercises');
+            } catch (e) {
+                // If localStorage is unavailable, ignore the error.
+            }
+
+            // Retrieve stored data or initialize empty arrays
+            // Built‑in workouts: these cannot be modified by the user but are used
+            // to prepopulate exercise lists and display associated finishers.
+            const builtInWorkouts = {
+                'Workout A': {
+                    description: 'Back, Biceps, & Hamstring',
+                    exercises: [
+                        'One Arm DB Row',
+                        'Hammer Curls',
+                        'Romanian Deadlift',
+                        'Reverse Fly',
+                        'DB Curls',
+                        'Cable Facepulls'
+                    ],
+                    finisher: [
+                        'Cable Side Twists',
+                        'Butterfly Kicks (30 seconds)'
+                    ]
+                    ,
+                    // Default rep scheme: reps for each set displayed on the
+                    // x‑axis of the matrix.  Feel free to adjust these values
+                    // to match your preferred programming (e.g., 12, 10, 8 reps).
+                    sets: [12, 10, 8]
+                },
+                'Workout B': {
+                    description: 'Chest & Tricep',
+                    exercises: [
+                        'DB Bench Press',
+                        'DB Floor Fly',
+                        'Decline DB Press',
+                        'DB Pullover',
+                        'DB/Cable Crossover',
+                        'Cable Tri-Kickback'
+                    ],
+                    finisher: [
+                        'Battle Ropes (30 seconds)',
+                        'Alternating Sit Ups'
+                    ]
+                    ,
+                    sets: [12, 10, 8]
+                },
+                'Workout C': {
+                    description: 'Shoulders & Arms',
+                    exercises: [
+                        'DB Shoulder Press',
+                        'Cable Lat Raises',
+                        'DB Upright Row',
+                        'DB Front Raises',
+                        'DB Curl & Press',
+                        'Cable Front Pushdowns'
+                    ],
+                    finisher: [
+                        'Cable Leg Raises',
+                        'Alternating Sit Ups'
+                    ]
+                    ,
+                    sets: [12, 10, 8]
+                }
+            };
+
+            // Stored logs and exercises are persisted in localStorage.  In
+            // environments where localStorage is disabled (e.g., local
+            // files in iOS Safari), accessing it may throw.  Wrap in
+            // try/catch to fall back to empty arrays when necessary.
+            let logs;
+            let exercises;
+            try {
+                logs = JSON.parse(localStorage.getItem('logs')) || [];
+                exercises = JSON.parse(localStorage.getItem('exercises')) || [];
+            } catch (e) {
+                logs = [];
+                exercises = [];
+            }
+
+            // Inject built‑in exercises into the exercise list so that
+            // progress charts can be viewed even before logging them.  This
+            // ensures the chart dropdown contains all movements from the
+            // built‑in workouts.  Avoid duplicates when merging.
+            // Merge built‑in exercise names into the exercises array so the
+            // chart drop down includes them even before logging.  Use
+            // Object.keys instead of Object.values for broader browser
+            // compatibility (e.g., older Safari versions).
+            Object.keys(builtInWorkouts).forEach(function (key) {
+                var w = builtInWorkouts[key];
+                w.exercises.forEach(function (ex) {
+                    if (!exercises.includes(ex)) {
+                        exercises.push(ex);
+                    }
+                });
+            });
+
+            const workoutSelect  = document.getElementById('workout-select');
+            const exerciseSelect = document.getElementById('exercise-chart-select');
+            const logTableBody   = document.getElementById('log-body');
+            const workoutDesc    = document.getElementById('workout-desc');
+            const finisherSection= document.getElementById('finisher-section');
+            const finisherList   = document.getElementById('finisher-list');
+            const addExerciseBtn = document.getElementById('add-exercise');
+            let currentWorkout   = 'custom';
+            let currentFinisher  = [];
+            let chartInstance    = null;
+            // Timer interval reference for finisher countdown
+            let timerInterval    = null;
+
+            /**
+             * Retrieve the most recent reps and weight values for a given
+             * exercise and set number from the stored logs.  Logs that do
+             * not specify a setNumber are treated as set 1 (for backward
+             * compatibility).  The search iterates from the end of the
+             * logs array to find the most recent entry.
+             *
+             * @param {string} exName The exercise name
+             * @param {number} setNum The set number (1‑based)
+             * @returns {{reps:number, weight:number}|null}
+             */
+            function getLastSetStats(exName, setNum) {
+                for (let i = logs.length - 1; i >= 0; i--) {
+                    const entry = logs[i];
+                    const entrySet = entry.setNumber || 1;
+                    if (entry.exercise === exName && entrySet === setNum) {
+                        return { reps: entry.reps, weight: entry.weight };
+                    }
+                }
+                return null;
+            }
+
+            /**
+             * Compute the number of days since the exercise was last performed
+             * for the given set number.  If no set number is provided in
+             * stored logs, it is treated as set 1.  If the exercise has
+             * never been logged, returns null.  Uses the current date for
+             * calculation.
+             * @param {string} exName The exercise name
+             * @param {number} setNum The set number (1‑based)
+             * @returns {number|null} The number of days since last performed or null
+             */
+            function getDaysSinceLast(exName, setNum) {
+                // Determine today's date (without time) in local timezone
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                for (let i = logs.length - 1; i >= 0; i--) {
+                    const entry = logs[i];
+                    const entrySet = entry.setNumber || 1;
+                    if (entry.exercise === exName && entrySet === setNum) {
+                        // Parse entry date (assumed format YYYY-MM-DD)
+                        const entryDate = new Date(entry.date);
+                        entryDate.setHours(0, 0, 0, 0);
+                        const diffMs = today - entryDate;
+                        if (diffMs < 0) {
+                            return 0;
+                        }
+                        return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    }
+                }
+                return null;
+            }
+
+            /**
+             * Update the built-in workout select options to include the
+             * number of days since the workout was last performed. For
+             * each built-in workout, find the most recent log date among
+             * all of its exercises and compute the difference between today
+             * and that date. Append this number of days (or "never" if
+             * none) in parentheses to the option text.
+             */
+            function updateWorkoutOptionDays() {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                Object.keys(builtInWorkouts).forEach(function (key) {
+                    let lastDate = null;
+                    logs.forEach(function (entry) {
+                        if (builtInWorkouts[key].exercises.indexOf(entry.exercise) !== -1) {
+                            if (!lastDate || entry.date > lastDate) {
+                                lastDate = entry.date;
+                            }
+                        }
+                    });
+                    let days = null;
+                    if (lastDate) {
+                        const d = new Date(lastDate);
+                        d.setHours(0, 0, 0, 0);
+                        const diffMs = today - d;
+                        if (diffMs >= 0) {
+                            days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                        } else {
+                            days = 0;
+                        }
+                    }
+                    // Find the option element corresponding to this workout
+                    const optionEls = Array.from(workoutSelect.options).filter(function (opt) { return opt.value === key; });
+                    optionEls.forEach(function (option) {
+                        const baseText = key + ' - ' + builtInWorkouts[key].description;
+                        if (days !== null) {
+                            option.textContent = baseText + ' (' + days + (days === 1 ? ' day' : ' days') + ' ago)';
+                        } else {
+                            option.textContent = baseText + ' (never)';
+                        }
+                    });
+                });
+            }
+
+            /**
+             * Display the finisher overlay and start a countdown timer.  The
+             * overlay is shown above all content and contains a large
+             * countdown timer plus a list of finishing exercises.  The
+             * timer counts down from 60 seconds, updating every second.  Once
+             * it reaches zero the overlay is hidden automatically.
+             *
+             * @param {string[]} finisherExercises The list of finisher
+             * exercises to display in the overlay.
+             */
+            function startFinisherOverlay(finisherExercises) {
+                // If a timer is already running, clear it to avoid
+                // overlapping countdowns
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+                // Populate the finisher overlay list
+                const overlayList = document.getElementById('finisher-overlay-list');
+                overlayList.innerHTML = '';
+                finisherExercises.forEach(function (exercise) {
+                    const li = document.createElement('li');
+                    li.textContent = exercise;
+                    overlayList.appendChild(li);
+                });
+                // Initialise countdown at 60 seconds (1 minute)
+                let remaining = 60;
+                const timerElem = document.getElementById('finisher-timer');
+                // Format seconds to MM:SS (for 1 minute always show 01:00 down to 00:00)
+                function formatTime(s) {
+                    const m = Math.floor(s / 60).toString().padStart(2, '0');
+                    const sec = (s % 60).toString().padStart(2, '0');
+                    return `${m}:${sec}`;
+                }
+                timerElem.textContent = formatTime(remaining);
+                // Show the overlay
+                const overlay = document.getElementById('finisher-overlay');
+                overlay.style.display = 'flex';
+                // Start countdown
+                timerInterval = setInterval(function () {
+                    remaining--;
+                    timerElem.textContent = formatTime(remaining);
+                    if (remaining <= 0) {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        // Hide overlay when timer finishes
+                        overlay.style.display = 'none';
+                    }
+                }, 1000);
+            }
+
+            /**
+             * Populate the workout dropdown with built‑in options and a custom option.
+             */
+            function populateWorkoutOptions() {
+                workoutSelect.innerHTML = '';
+                // Custom workout option
+                const customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                customOpt.textContent = 'Custom Workout';
+                workoutSelect.appendChild(customOpt);
+                // Built‑in workouts
+                Object.keys(builtInWorkouts).forEach(key => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    // Combine name and description for readability
+                    opt.textContent = `${key} - ${builtInWorkouts[key].description}`;
+                    workoutSelect.appendChild(opt);
+                });
+            }
+
+            /**
+             * Refresh the options in the exercise chart select menu
+             */
+            function refreshExerciseChartOptions() {
+                exerciseSelect.innerHTML = '';
+                exercises.forEach(ex => {
+                    const option = document.createElement('option');
+                    option.value = ex;
+                    option.textContent = ex;
+                    exerciseSelect.appendChild(option);
+                });
+            }
+
+            /**
+             * Render the logs table based on the stored log entries
+             */
+            function renderLogs() {
+                logTableBody.innerHTML = '';
+                logs.forEach(entry => {
+                    const tr = document.createElement('tr');
+                    const power = entry.weight * entry.reps;
+                    tr.innerHTML = `
+                        <td>${entry.date}</td>
+                        <td>${entry.exercise}</td>
+                        <td>${entry.weight}</td>
+                        <td>${entry.reps}</td>
+                        <td>${power}</td>
+                    `;
+                    logTableBody.appendChild(tr);
+                });
+            }
+
+            /**
+             * Generate a new exercise row element and append it to the container
+             * @param {string} [exerciseName] Optional prefilled exercise name
+             */
+            function createExerciseRow(exerciseName = '') {
+                const row = document.createElement('div');
+                row.className = 'exercise-row';
+                // Build custom row with wrappers so we can display previous values
+                row.innerHTML = `
+                    <input type="text" class="exercise-name" placeholder="Exercise Name" required>
+                    <div style="display:flex; flex-direction:column; flex:1;">
+                        <input type="number" class="exercise-weight" placeholder="Weight" required>
+                        <div class="prev-value prev-weight"></div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; flex:1;">
+                        <input type="number" class="exercise-reps" placeholder="Reps" required>
+                        <div class="prev-value prev-reps"></div>
+                    </div>
+                    <button type="button" class="remove-row" title="Remove Row">&times;</button>
+                `;
+                if (exerciseName) {
+                    row.querySelector('.exercise-name').value = exerciseName;
+                }
+                // Function to update previous reps and weight for this row
+                function updatePrev() {
+                    const name = row.querySelector('.exercise-name').value.trim();
+                    const prevW = row.querySelector('.prev-weight');
+                    const prevR = row.querySelector('.prev-reps');
+                    if (!name) {
+                        prevW.textContent = '';
+                        prevR.textContent = '';
+                        return;
+                    }
+                    const stats = getLastSetStats(name, 1);
+                    if (stats) {
+                        prevW.textContent = 'Prev: ' + stats.weight;
+                        prevR.textContent = 'Prev: ' + stats.reps;
+                    } else {
+                        prevW.textContent = '';
+                        prevR.textContent = '';
+                    }
+                }
+                // Initial update
+                updatePrev();
+                // Listen for changes to exercise name to update previous values
+                row.querySelector('.exercise-name').addEventListener('input', updatePrev);
+                // Add event listener to remove button
+                row.querySelector('.remove-row').addEventListener('click', function () {
+                    row.remove();
+                });
+                document.getElementById('exercise-container').appendChild(row);
+            }
+
+            /**
+             * Update the chart based on the selected exercise and metric
+             */
+            function updateChart() {
+                const selectedExercise = exerciseSelect.value;
+                // If nothing is selected, clear chart
+                if (!selectedExercise) {
+                    if (chartInstance) {
+                        chartInstance.destroy();
+                        chartInstance = null;
+                    }
+                    return;
+                }
+                // Compute average total power and heaviest weight per date for
+                // the selected exercise.  This allows multiple lines to be
+                // displayed simultaneously: one for the average total power and
+                // one for the heaviest weight lifted.
+                const entries = logs.filter(function (l) { return l.exercise === selectedExercise; });
+                // Group by date
+                const grouped = {};
+                entries.forEach(function (entry) {
+                    const d = entry.date;
+                    const power = entry.weight * entry.reps;
+                    if (!grouped[d]) {
+                        grouped[d] = { sumPower: 0, count: 0, maxWeight: 0 };
+                    }
+                    grouped[d].sumPower += power;
+                    grouped[d].count += 1;
+                    if (entry.weight > grouped[d].maxWeight) {
+                        grouped[d].maxWeight = entry.weight;
+                    }
+                });
+                const labels = Object.keys(grouped).sort(function (a, b) { return new Date(a) - new Date(b); });
+                const avgPowerData = labels.map(function (date) {
+                    const g = grouped[date];
+                    return g.count > 0 ? g.sumPower / g.count : 0;
+                });
+                // Define a single dataset showing only the average power per set.
+                const config = {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Average Power per Set',
+                                data: avgPowerData,
+                                fill: false,
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                tension: 0.1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                };
+                // Destroy existing chart if it exists
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+                // Only attempt to draw the chart if Chart.js has loaded.  On
+                // some mobile browsers (e.g., offline Safari) the CDN may
+                // fail to load and Chart will be undefined, which would
+                // otherwise throw a runtime error and stop the rest of the
+                // script from running.  Guard against that by checking
+                // whether Chart is available.
+                if (typeof Chart !== 'undefined') {
+                    const ctx = document.getElementById('progressChart').getContext('2d');
+                    chartInstance = new Chart(ctx, config);
+                }
+            }
+
+            /**
+             * Initialize the date input with today's date (YYYY-MM-DD)
+             */
+            function initializeDate() {
+                const dateInput = document.getElementById('log-date');
+                const today = new Date().toISOString().split('T')[0];
+                dateInput.value = today;
+            }
+
+            // No preset form exists any longer; built‑in workouts are defined in code
+
+            /**
+             * Handler for changes in the preset selector
+             * When a preset is chosen, prepopulate the exercise rows accordingly
+             */
+            /**
+             * Handle changes in the workout selector.  When a built‑in workout is
+             * selected the exercise rows are populated automatically and the
+             * finisher list is stored for later display.  Selecting "custom"
+             * clears the list and allows manual entry.
+             */
+            workoutSelect.addEventListener('change', function () {
+                const selected = workoutSelect.value;
+                currentWorkout = selected;
+                // Reset finisher and description
+                finisherSection.style.display = 'none';
+                finisherList.innerHTML = '';
+                // Clear both containers
+                const rowContainer = document.getElementById('exercise-container');
+                rowContainer.innerHTML = '';
+                const matrixContainer = document.getElementById('matrix-container');
+                matrixContainer.innerHTML = '';
+                if (selected === 'custom') {
+                    // Show instructions and custom row interface
+                    workoutDesc.textContent = 'Enter your own exercises below.';
+                    currentFinisher = [];
+                    // show row container, hide matrix
+                    rowContainer.style.display = 'block';
+                    matrixContainer.style.display = 'none';
+                    addExerciseBtn.style.display = 'inline-block';
+                    createExerciseRow();
+                    // Show remove buttons on rows for custom workouts
+                    document.querySelectorAll('.remove-row').forEach(function (btn) {
+                        btn.style.display = 'inline-block';
+                    });
+                } else if (builtInWorkouts[selected]) {
+                    const w = builtInWorkouts[selected];
+                    workoutDesc.textContent = w.description;
+                    // Store finisher exercises for later display
+                    currentFinisher = w.finisher.slice();
+                    // hide row interface, show matrix
+                    rowContainer.style.display = 'none';
+                    addExerciseBtn.style.display = 'none';
+                    matrixContainer.style.display = 'block';
+                    // Build a matrix table with three sets.  Each set has two
+                    // editable fields: reps and weight.  The header reflects
+                    // the set number rather than prescribed reps.  Users can
+                    // input any number of reps or weight per set.
+                    var table = document.createElement('table');
+                    table.className = 'matrix-table';
+                    var thead = document.createElement('thead');
+                    var headerRow = document.createElement('tr');
+                    var exTh = document.createElement('th');
+                    exTh.textContent = 'Exercise';
+                    headerRow.appendChild(exTh);
+                    for (var setIndex = 1; setIndex <= 3; setIndex++) {
+                        var thReps = document.createElement('th');
+                        thReps.textContent = 'Set ' + setIndex + ' Reps';
+                        headerRow.appendChild(thReps);
+                        var thWeight = document.createElement('th');
+                        thWeight.textContent = 'Set ' + setIndex + ' Weight';
+                        headerRow.appendChild(thWeight);
+                    }
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+                    var tbody = document.createElement('tbody');
+                    w.exercises.forEach(function (exName) {
+                        // Two rows: one for inputs, one for days since
+                        var trInputs = document.createElement('tr');
+                        var trDays   = document.createElement('tr');
+                        // Exercise name cell spans both rows
+                        var nameTd = document.createElement('td');
+                        nameTd.textContent = exName;
+                        nameTd.rowSpan = 2;
+                        trInputs.appendChild(nameTd);
+                        for (var setNum = 1; setNum <= 3; setNum++) {
+                            // Build reps cell
+                            var tdReps = document.createElement('td');
+                            var divReps = document.createElement('div');
+                            divReps.style.display = 'flex';
+                            divReps.style.flexDirection = 'column';
+                            var inputReps = document.createElement('input');
+                            inputReps.type = 'number';
+                            inputReps.placeholder = 'Reps';
+                            divReps.appendChild(inputReps);
+                            var prevRep = document.createElement('div');
+                            prevRep.className = 'prev-value';
+                            var stats = getLastSetStats(exName, setNum);
+                            if (stats) {
+                                prevRep.textContent = 'Prev: ' + stats.reps;
+                            }
+                            divReps.appendChild(prevRep);
+                            tdReps.appendChild(divReps);
+                            trInputs.appendChild(tdReps);
+                            // Build weight cell
+                            var tdWeight = document.createElement('td');
+                            var divWeight = document.createElement('div');
+                            divWeight.style.display = 'flex';
+                            divWeight.style.flexDirection = 'column';
+                            var inputWeight = document.createElement('input');
+                            inputWeight.type = 'number';
+                            inputWeight.placeholder = 'Weight';
+                            divWeight.appendChild(inputWeight);
+                            var prevWt = document.createElement('div');
+                            prevWt.className = 'prev-value';
+                            if (stats) {
+                                prevWt.textContent = 'Prev: ' + stats.weight;
+                            }
+                            divWeight.appendChild(prevWt);
+                            tdWeight.appendChild(divWeight);
+                            trInputs.appendChild(tdWeight);
+                            // Create days-since cell for this set
+                            var tdDays = document.createElement('td');
+                            tdDays.colSpan = 2;
+                            tdDays.className = 'days-since';
+                            var days = getDaysSinceLast(exName, setNum);
+                            if (days !== null) {
+                                tdDays.textContent = days + (days === 1 ? ' day' : ' days') + ' since';
+                            } else {
+                                tdDays.textContent = '';
+                            }
+                            trDays.appendChild(tdDays);
+                        }
+                        tbody.appendChild(trInputs);
+                        tbody.appendChild(trDays);
+                    });
+                    table.appendChild(tbody);
+                    matrixContainer.appendChild(table);
+                    // Hide remove buttons for built‑in workouts so rows cannot be removed
+                    document.querySelectorAll('.remove-row').forEach(function (btn) {
+                        btn.style.display = 'none';
+                    });
+                }
+            });
+
+            /**
+             * Handler for adding a new exercise row in the log form
+             */
+            document.getElementById('add-exercise').addEventListener('click', function () {
+                createExerciseRow();
+            });
+
+            /**
+             * Handler for submitting the log form.  Saves the workout entries and
+             * displays finisher exercises when applicable.  For custom workouts the
+             * finisher section remains hidden.
+             */
+            document.getElementById('log-form').addEventListener('submit', function (event) {
+                event.preventDefault();
+                const date    = document.getElementById('log-date').value;
+                let validEntry = false;
+                if (currentWorkout === 'custom') {
+                    // Handle custom workout rows
+                    const rows = document.querySelectorAll('.exercise-row');
+                    rows.forEach(function (row) {
+                        const exName  = row.querySelector('.exercise-name').value.trim();
+                        const weight  = parseFloat(row.querySelector('.exercise-weight').value);
+                        const reps    = parseInt(row.querySelector('.exercise-reps').value);
+                        if (!exName || isNaN(weight) || isNaN(reps)) {
+                            return; // Skip invalid rows
+                        }
+                        validEntry = true;
+                        logs.push({ date: date, exercise: exName, weight: weight, reps: reps, setNumber: 1 });
+                        if (exercises.indexOf(exName) === -1) {
+                            exercises.push(exName);
+                        }
+                    });
+                } else if (builtInWorkouts[currentWorkout]) {
+                    // Handle built‑in workout matrix with three sets.  Each set
+                    // consists of two inputs: reps and weight.  Only save
+                    // entries where both reps and weight are provided.
+                    const matrixRows = document.querySelectorAll('#matrix-container tbody tr');
+                    matrixRows.forEach(function (tr) {
+                        // Skip rows without inputs (these are the days rows)
+                        const inputElements = tr.querySelectorAll('input');
+                        if (inputElements.length === 0) {
+                            return;
+                        }
+                        const cells = tr.querySelectorAll('td');
+                        const exName = cells[0].textContent;
+                        // Each input row contains the exercise name cell followed by 3*2 cells for sets
+                        for (var setIndex = 0; setIndex < 3; setIndex++) {
+                            const repsInput = cells[1 + setIndex * 2].querySelector('input');
+                            const weightInput = cells[2 + setIndex * 2].querySelector('input');
+                            const repsVal = parseInt(repsInput.value);
+                            const weightVal = parseFloat(weightInput.value);
+                            if (!isNaN(repsVal) && !isNaN(weightVal)) {
+                                validEntry = true;
+                                logs.push({
+                                    date: date,
+                                    exercise: exName,
+                                    weight: weightVal,
+                                    reps: repsVal,
+                                    setNumber: setIndex + 1
+                                });
+                                if (exercises.indexOf(exName) === -1) {
+                                    exercises.push(exName);
+                                }
+                            }
+                        }
+                    });
+                }
+                if (!validEntry) {
+                    alert('Please fill out at least one exercise entry.');
+                    return;
+                }
+                // Persist data.  Use try/catch to gracefully handle
+                // environments without localStorage (e.g., local files on
+                // iOS Safari).  If storage is unavailable, the logs will
+                // only exist for the current session.
+                try {
+                    localStorage.setItem('logs', JSON.stringify(logs));
+                    localStorage.setItem('exercises', JSON.stringify(exercises));
+                } catch (e) {
+                    // If localStorage is unavailable, ignore the error.
+                }
+                // Reset interfaces
+                document.getElementById('exercise-container').innerHTML = '';
+                document.getElementById('matrix-container').innerHTML = '';
+                // Recreate interface based on workout type
+                if (currentWorkout === 'custom') {
+                    // show row interface
+                    document.getElementById('exercise-container').style.display = 'block';
+                    document.getElementById('matrix-container').style.display = 'none';
+                    addExerciseBtn.style.display = 'inline-block';
+                    workoutDesc.textContent = 'Enter your own exercises below.';
+                    createExerciseRow();
+                    document.querySelectorAll('.remove-row').forEach(function (btn) {
+                        btn.style.display = 'inline-block';
+                    });
+                } else if (builtInWorkouts[currentWorkout]) {
+                    // Rebuild matrix for the built-in workout. Each exercise now
+                    // occupies two table rows: one for inputs (reps/weight) and
+                    // one for the days-since indicator. This mirrors the
+                    // construction in the change handler.
+                    const w = builtInWorkouts[currentWorkout];
+                    const matrixContainer = document.getElementById('matrix-container');
+                    var table = document.createElement('table');
+                    table.className = 'matrix-table';
+                    var thead = document.createElement('thead');
+                    var headerRow = document.createElement('tr');
+                    var exTh = document.createElement('th');
+                    exTh.textContent = 'Exercise';
+                    headerRow.appendChild(exTh);
+                    for (var setIdx = 1; setIdx <= 3; setIdx++) {
+                        var thReps = document.createElement('th');
+                        thReps.textContent = 'Set ' + setIdx + ' Reps';
+                        headerRow.appendChild(thReps);
+                        var thWt = document.createElement('th');
+                        thWt.textContent = 'Set ' + setIdx + ' Weight';
+                        headerRow.appendChild(thWt);
+                    }
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+                    var tbody = document.createElement('tbody');
+                    w.exercises.forEach(function (exName) {
+                        var trInputs = document.createElement('tr');
+                        var trDays   = document.createElement('tr');
+                        var nameTd = document.createElement('td');
+                        nameTd.textContent = exName;
+                        nameTd.rowSpan = 2;
+                        trInputs.appendChild(nameTd);
+                        for (var setN = 1; setN <= 3; setN++) {
+                            // Reps input cell
+                            var tdR = document.createElement('td');
+                            var divR = document.createElement('div');
+                            divR.style.display = 'flex';
+                            divR.style.flexDirection = 'column';
+                            var inputR = document.createElement('input');
+                            inputR.type = 'number';
+                            inputR.placeholder = 'Reps';
+                            divR.appendChild(inputR);
+                            var prevR = document.createElement('div');
+                            prevR.className = 'prev-value';
+                            var stats = getLastSetStats(exName, setN);
+                            if (stats) {
+                                prevR.textContent = 'Prev: ' + stats.reps;
+                            }
+                            divR.appendChild(prevR);
+                            tdR.appendChild(divR);
+                            trInputs.appendChild(tdR);
+                            // Weight input cell
+                            var tdW = document.createElement('td');
+                            var divW = document.createElement('div');
+                            divW.style.display = 'flex';
+                            divW.style.flexDirection = 'column';
+                            var inputW = document.createElement('input');
+                            inputW.type = 'number';
+                            inputW.placeholder = 'Weight';
+                            divW.appendChild(inputW);
+                            var prevWeight = document.createElement('div');
+                            prevWeight.className = 'prev-value';
+                            if (stats) {
+                                prevWeight.textContent = 'Prev: ' + stats.weight;
+                            }
+                            divW.appendChild(prevWeight);
+                            tdW.appendChild(divW);
+                            trInputs.appendChild(tdW);
+                            // Days-since cell spanning both columns
+                            var tdDays = document.createElement('td');
+                            tdDays.colSpan = 2;
+                            tdDays.className = 'days-since';
+                            var days = getDaysSinceLast(exName, setN);
+                            if (days !== null) {
+                                tdDays.textContent = days + (days === 1 ? ' day' : ' days') + ' since';
+                            } else {
+                                tdDays.textContent = '';
+                            }
+                            trDays.appendChild(tdDays);
+                        }
+                        tbody.appendChild(trInputs);
+                        tbody.appendChild(trDays);
+                    });
+                    table.appendChild(tbody);
+                    matrixContainer.appendChild(table);
+                    // Hide row interface
+                    document.getElementById('exercise-container').style.display = 'none';
+                    addExerciseBtn.style.display = 'none';
+                    matrixContainer.style.display = 'block';
+                    // Hide remove buttons again
+                    document.querySelectorAll('.remove-row').forEach(function (btn) {
+                        btn.style.display = 'none';
+                    });
+                }
+                // Re-render logs and charts
+                renderLogs();
+                refreshExerciseChartOptions();
+                if (!exerciseSelect.value && exercises.length > 0) {
+                    exerciseSelect.value = exercises[0];
+                }
+                updateChart();
+                // If there are finisher exercises associated with this
+                // workout, display the finisher overlay with a countdown
+                if (currentFinisher && currentFinisher.length > 0) {
+                    startFinisherOverlay(currentFinisher);
+                }
+
+                // Refresh workout option labels to reflect updated days since last performed
+                updateWorkoutOptionDays();
+            });
+
+            /**
+             * Event listeners for chart updates when the exercise or metric changes
+             */
+            exerciseSelect.addEventListener('change', updateChart);
+
+            // Initial setup
+            initializeDate();
+            renderLogs();
+            refreshExerciseChartOptions();
+            // Default select first exercise if available
+            if (exercises.length > 0) {
+                exerciseSelect.value = exercises[0];
+            }
+            // Create one default row for logging new workouts
+            createExerciseRow();
+            updateChart();
+            // Update built-in workout dropdown with days since last performed
+            updateWorkoutOptionDays();
+
+            // Toggle display of logs and chart sections when buttons are clicked.  The
+            // sections are hidden by default to simplify the page.  When
+            // showing logs or chart we ensure the data is up to date by
+            // re-rendering logs and refreshing chart options/values.
+            var logsSection   = document.getElementById('logs-section');
+            var chartSection  = document.getElementById('chart-section');
+            var viewLogsBtn   = document.getElementById('view-logs-btn');
+            var viewChartBtn  = document.getElementById('view-chart-btn');
+            viewLogsBtn.addEventListener('click', function () {
+                var visible = logsSection.style.display === 'block';
+                if (!visible) {
+                    renderLogs();
+                }
+                    // Toggle visibility
+                logsSection.style.display = visible ? 'none' : 'block';
+            });
+            viewChartBtn.addEventListener('click', function () {
+                var visible = chartSection.style.display === 'block';
+                if (!visible) {
+                    // Ensure exercise list is up to date and default selection
+                    refreshExerciseChartOptions();
+                    if (!exerciseSelect.value && exercises.length > 0) {
+                        exerciseSelect.value = exercises[0];
+                    }
+                    updateChart();
+                }
+                chartSection.style.display = visible ? 'none' : 'block';
+            });
+        });
+    </script>
+</body>
+</html>
